@@ -44,6 +44,24 @@ TRANSLATION_API_KEY = sk-your-openai-api-key
 TRANSLATION_API_URL = https://api.openai.com/v1/chat/completions
 ```
 
+**📝 API配置说明**：
+
+- **官方OpenAI API**：
+  ```
+  TRANSLATION_API_URL = https://api.openai.com/v1/chat/completions
+  ```
+
+- **第三方代理服务**（如 gptsapi.net）：
+  ```
+  TRANSLATION_API_URL = https://api.gptsapi.net
+  ```
+  > 注意：只需填写基础URL，系统会自动添加 `/v1/chat/completions` 端点
+
+- **可选配置**：
+  ```
+  TRANSLATION_MODEL = gpt-3.5-turbo  # 默认模型
+  ```
+
 ### 3. 触发构建
 
 #### 方法1: 手动触发（推荐）

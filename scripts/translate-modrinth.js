@@ -9,7 +9,16 @@ const path = require('path');
 class ModrinthTranslator {
   constructor(config = {}) {
     this.apiKey = config.apiKey || process.env.TRANSLATION_API_KEY;
-    this.apiUrl = config.apiUrl || process.env.TRANSLATION_API_URL || 'https://api.openai.com/v1/chat/completions';
+    
+    // 处理API URL配置
+    let apiUrl = config.apiUrl || process.env.TRANSLATION_API_URL || 'https://api.openai.com/v1/chat/completions';
+    
+    // 如果只提供了基础URL，自动添加端点路径
+    if (apiUrl && !apiUrl.includes('/chat/completions') && !apiUrl.includes('/v1/')) {
+      apiUrl = apiUrl.replace(/\/$/, '') + '/v1/chat/completions';
+    }
+    
+    this.apiUrl = apiUrl;
     this.model = config.model || process.env.TRANSLATION_MODEL || 'gpt-3.5-turbo';
     this.targetLanguages = this.parseLanguages(config.targetLanguages || process.env.TARGET_LANGUAGES || 'zh-CN,ja-JP,ko-KR,fr-FR,de-DE,es-ES');
     this.batchSize = config.batchSize || 10;
@@ -40,6 +49,13 @@ class ModrinthTranslator {
   async translateText(text, targetLang) {
     if (!this.apiKey) {
       throw new Error('Translation API key is required');
+    }
+    
+    // 调试信息（仅在第一次调用时显示）
+    if (!this.debugShown) {
+      console.log(`🔧 API Config: ${this.apiUrl.replace(/\/[^\/]*$/, '/***')}`);
+      console.log(`🤖 Model: ${this.model}`);
+      this.debugShown = true;
     }
 
     // 语言名称映射
@@ -74,10 +90,21 @@ ${text}`;
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`API Error ${response.status}: ${errorText}`);
+        console.error(`❌ API Error ${response.status} for "${text.substring(0, 30)}..."`);
+        console.error(`🔗 URL: ${this.apiUrl}`);
+        console.error(`📝 Response: ${errorText.substring(0, 500)}...`);
+        throw new Error(`API Error ${response.status}: ${errorText.substring(0, 200)}`);
       }
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error(`❌ JSON Parse Error for "${text.substring(0, 30)}..."`);
+        console.error(`📝 Raw response: ${responseText.substring(0, 500)}...`);
+        throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}`);
+      }
       let translatedText = data.choices[0]?.message?.content?.trim() || text;
       
       // 清理翻译结果

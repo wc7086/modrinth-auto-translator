@@ -230,19 +230,62 @@ jobs:
           cd translator
           echo "🌍 Starting translation process..."
           
+          # 检查API配置
+          echo "🔍 Checking API configuration..."
+          if [ -z "$TRANSLATION_API_KEY" ]; then
+            echo "❌ TRANSLATION_API_KEY is not set"
+            echo "⚠️ Please set the TRANSLATION_API_KEY secret in your repository"
+            exit 1
+          else
+            echo "✅ TRANSLATION_API_KEY is set (${#TRANSLATION_API_KEY} characters)"
+          fi
+          
+          if [ -z "$TRANSLATION_API_URL" ]; then
+            echo "⚠️ TRANSLATION_API_URL not set, using default OpenAI endpoint"
+            export TRANSLATION_API_URL="https://api.openai.com/v1/chat/completions"
+          else
+            echo "✅ TRANSLATION_API_URL: $TRANSLATION_API_URL"
+          fi
+          
+          if [ -z "$TRANSLATION_MODEL" ]; then
+            echo "⚠️ TRANSLATION_MODEL not set, using default gpt-3.5-turbo"
+            export TRANSLATION_MODEL="gpt-3.5-turbo"
+          else
+            echo "✅ TRANSLATION_MODEL: $TRANSLATION_MODEL"
+          fi
+          
           # 设置目标语言
           export TARGET_LANGUAGES="${{ steps.setup-languages.outputs.languages }}"
+          echo "🎯 Target languages: $TARGET_LANGUAGES"
+          
+          # 测试API连接
+          echo "🔧 Testing API connection..."
+          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
+            -H "Authorization: Bearer $TRANSLATION_API_KEY" \
+            -H "Content-Type: application/json" \
+            "$TRANSLATION_API_URL" || echo "⚠️ API test failed, but continuing..."
           
           # 运行翻译
-          node scripts/translate-modrinth.js modrinth-translations.json ../modrinth-source
+          echo "🚀 Starting translation..."
+          node scripts/translate-modrinth.js modrinth-translations.json ../modrinth-source || {
+            echo "❌ Translation script failed"
+            echo "📊 Let's check what we have so far..."
+            find ../modrinth-source -name "locales" -type d 2>/dev/null || echo "No locales directories found"
+            exit 1
+          }
           
           # 检查翻译结果
-          if [ -d "../modrinth-source/apps/app-frontend/src/locales" ]; then
+          echo "🔍 Checking translation results..."
+          LOCALE_DIRS=$(find ../modrinth-source -name "locales" -type d 2>/dev/null)
+          if [ -n "$LOCALE_DIRS" ]; then
             echo "✅ Translation completed"
             echo "📁 Generated language directories:"
-            ls -la ../modrinth-source/apps/app-frontend/src/locales/
+            for dir in $LOCALE_DIRS; do
+              echo "📂 $dir:"
+              ls -la "$dir/" 2>/dev/null || echo "  (empty or inaccessible)"
+            done
           else
-            echo "❌ Translation failed"
+            echo "❌ No locales directories found"
             exit 1
           fi
 
