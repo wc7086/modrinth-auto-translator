@@ -194,10 +194,56 @@ class ModrinthTranslationExtractor {
       throw new Error(`Modrinth source path not found: ${this.sourcePath}`);
     }
     
+    // 调试：显示源码目录结构
+    console.log(`📁 Source directory contents:`);
+    try {
+      const contents = fs.readdirSync(this.sourcePath);
+      contents.forEach(item => {
+        const itemPath = path.join(this.sourcePath, item);
+        const stats = fs.statSync(itemPath);
+        console.log(`  ${stats.isDirectory() ? '📁' : '📄'} ${item}`);
+      });
+      
+      // 检查apps目录
+      const appsPath = path.join(this.sourcePath, 'apps');
+      if (fs.existsSync(appsPath)) {
+        console.log(`📱 Apps directory contents:`);
+        const appsContents = fs.readdirSync(appsPath);
+        appsContents.forEach(item => {
+          console.log(`  📁 apps/${item}`);
+        });
+        
+        // 检查app-frontend
+        const appFrontendPath = path.join(appsPath, 'app-frontend');
+        if (fs.existsSync(appFrontendPath)) {
+          console.log(`🎯 app-frontend exists`);
+          const srcPath = path.join(appFrontendPath, 'src');
+          if (fs.existsSync(srcPath)) {
+            console.log(`📂 src directory exists`);
+            const componentsPath = path.join(srcPath, 'components');
+            if (fs.existsSync(componentsPath)) {
+              console.log(`🧩 components directory exists`);
+            } else {
+              console.log(`❌ components directory not found at: ${componentsPath}`);
+            }
+          } else {
+            console.log(`❌ src directory not found at: ${srcPath}`);
+          }
+        } else {
+          console.log(`❌ app-frontend not found at: ${appFrontendPath}`);
+        }
+      } else {
+        console.log(`❌ apps directory not found at: ${appsPath}`);
+      }
+    } catch (error) {
+      console.error(`Error reading source directory: ${error.message}`);
+    }
+    
     const allTranslations = {};
     
     // 扫描现有的JSON翻译文件
     const jsonPattern = path.join(this.sourcePath, '**/locales/en-US/*.json');
+    console.log(`🔍 Searching for JSON files with pattern: ${jsonPattern}`);
     const jsonFiles = glob.sync(jsonPattern);
     
     console.log(`📄 Found ${jsonFiles.length} existing translation files:`);
@@ -213,6 +259,7 @@ class ModrinthTranslationExtractor {
     
     // 扫描Vue组件文件（重点关注app-frontend）
     const vuePattern = path.join(this.sourcePath, 'apps/app-frontend/src/components/**/*.vue');
+    console.log(`🔍 Searching for Vue files with pattern: ${vuePattern}`);
     const vueFiles = glob.sync(vuePattern);
     
     console.log(`\n🎯 Found ${vueFiles.length} Vue component files:`);

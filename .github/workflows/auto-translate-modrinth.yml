@@ -72,7 +72,23 @@ jobs:
           VERSION="${{ steps.determine-version.outputs.version }}"
           echo "📥 Cloning Modrinth $VERSION..."
           
-          git clone --depth 1 --branch $VERSION https://github.com/${{ env.MODRINTH_REPO }}.git modrinth-source
+          # 检查版本是否存在
+          if [ "$VERSION" = "latest" ]; then
+            echo "⚠️ Latest tag specified, getting actual latest release..."
+            ACTUAL_VERSION=$(curl -s https://api.github.com/repos/${{ env.MODRINTH_REPO }}/releases/latest | jq -r .tag_name)
+            echo "🎯 Actual latest version: $ACTUAL_VERSION"
+            VERSION="$ACTUAL_VERSION"
+          fi
+          
+          # 尝试克隆指定版本，如果失败则克隆main分支
+          if git clone --depth 1 --branch "$VERSION" https://github.com/${{ env.MODRINTH_REPO }}.git modrinth-source; then
+            echo "✅ Successfully cloned version $VERSION"
+          else
+            echo "⚠️ Failed to clone version $VERSION, trying main branch..."
+            git clone --depth 1 --branch main https://github.com/${{ env.MODRINTH_REPO }}.git modrinth-source
+            VERSION="main-$(date +%Y%m%d)"
+            echo "✅ Cloned main branch, using version: $VERSION"
+          fi
           
           cd modrinth-source
           COMMIT_SHA=$(git rev-parse HEAD)
@@ -85,15 +101,23 @@ jobs:
           # 显示项目结构
           echo "📁 Project structure:"
           ls -la
-          echo "📱 App structure:"
-          ls -la apps/app/ || echo "⚠️ App directory not found"
+          echo "📱 Apps directory structure:"
+          ls -la apps/ || echo "⚠️ Apps directory not found"
+          echo "🎯 App-frontend structure:"
+          ls -la apps/app-frontend/ || echo "⚠️ App-frontend directory not found"
+          echo "🧩 Components structure:"
+          ls -la apps/app-frontend/src/components/ || echo "⚠️ Components directory not found"
 
       - name: Install translation dependencies
         run: |
           cd translator
+          echo "📦 Installing translation dependencies..."
           npm install
           # 安装额外依赖
           npm install glob @types/node
+          echo "✅ Dependencies installed successfully"
+          echo "📋 Installed packages:"
+          npm list --depth=0
 
       - name: Extract translation strings
         id: extract
@@ -101,20 +125,63 @@ jobs:
           cd translator
           echo "🔍 Extracting translations from Modrinth source..."
           
+          # 检查工作目录和源码路径
+          echo "📍 Current working directory: $(pwd)"
+          echo "📁 Translator directory contents:"
+          ls -la
+          echo "📂 Parent directory contents:"
+          ls -la ..
+          echo "🎯 Modrinth source path check:"
+          ls -la ../modrinth-source || echo "❌ Modrinth source not found"
+          
           # 设置源码路径
           export MODRINTH_SOURCE_PATH="../modrinth-source"
           
           # 运行提取脚本
-          node scripts/extract-modrinth-translations.js ../modrinth-source modrinth-translations.json
+          echo "🚀 Running extraction script..."
+          node scripts/extract-modrinth-translations.js ../modrinth-source modrinth-translations.json || {
+            echo "❌ Extraction script failed with exit code $?"
+            echo "📋 Let's check what went wrong..."
+            ls -la ../modrinth-source/apps/ || echo "No apps directory"
+            exit 1
+          }
           
           # 检查提取结果
           if [ -f "modrinth-translations.json" ]; then
-            TOTAL_KEYS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('modrinth-translations.json', 'utf8')).totalKeys || 0)")
+            echo "✅ Translation file created"
+            echo "📄 File size: $(wc -c < modrinth-translations.json) bytes"
+            TOTAL_KEYS=$(node -e "
+              try {
+                const data = JSON.parse(require('fs').readFileSync('modrinth-translations.json', 'utf8'));
+                console.log(data.totalKeys || 0);
+              } catch(e) {
+                console.log('0');
+              }
+            ")
             echo "total-keys=$TOTAL_KEYS" >> $GITHUB_OUTPUT
             echo "📊 Extracted $TOTAL_KEYS translation keys"
+            
+            # 显示前几个键作为样本
+            echo "🔍 Sample translation keys:"
+            node -e "
+              try {
+                const data = JSON.parse(require('fs').readFileSync('modrinth-translations.json', 'utf8'));
+                const files = Object.keys(data.details || {});
+                console.log('Files found:', files.length);
+                files.slice(0, 3).forEach(file => {
+                  const keys = Object.keys(data.details[file] || {});
+                  console.log(\`  \${file}: \${keys.length} keys\`);
+                  if (keys.length > 0) {
+                    console.log(\`    Sample: \${keys.slice(0, 2).join(', ')}\`);
+                  }
+                });
+              } catch(e) {
+                console.log('Error reading translation file:', e.message);
+              }
+            "
           else
             echo "total-keys=0" >> $GITHUB_OUTPUT
-            echo "❌ No translations extracted"
+            echo "❌ No translation file created"
           fi
 
       - name: Check translations
