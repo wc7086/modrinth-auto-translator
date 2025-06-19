@@ -69,8 +69,15 @@ class ModrinthTranslator {
     };
 
     const langName = languageNames[targetLang] || targetLang;
-    const prompt = `Please translate the following UI text to ${langName}. This is from the Modrinth application interface. Keep the original formatting, any HTML tags, and any placeholders like {variables}. Only return the translated text without quotes or explanations:
+    const prompt = `Please translate the following UI text to ${langName}. This is from the Modrinth application interface. 
 
+Requirements:
+- Keep the original formatting exactly
+- Preserve any HTML tags and placeholders like {variables}
+- Do NOT add ellipsis (...) unless present in the original
+- Only return the translated text without quotes, explanations, or additional punctuation
+
+Text to translate:
 ${text}`;
 
     try {
@@ -110,6 +117,11 @@ ${text}`;
       // 清理翻译结果
       translatedText = translatedText.replace(/^["']|["']$/g, '');
       
+      // 清理不必要的省略号（如果原文没有省略号）
+      if (!text.includes('...') && translatedText.includes('...')) {
+        translatedText = translatedText.replace(/\.\.\.+$/, '');
+      }
+      
       return translatedText;
     } catch (error) {
       console.error(`Translation error for "${text.substring(0, 50)}..." to ${targetLang}:`, error.message);
@@ -137,7 +149,11 @@ ${text}`;
         batch.map(async (text, index) => {
           try {
             const result = await this.translateText(text, targetLang);
-            console.log(`      ✓ ${i + index + 1}/${texts.length}: "${text.substring(0, 30)}..." → "${result.substring(0, 30)}..."`);
+            // 显示完整翻译结果（如果长度合理）
+            const showFull = text.length <= 50 && result.length <= 50;
+            const displayText = showFull ? text : `${text.substring(0, 30)}...`;
+            const displayResult = showFull ? result : `${result.substring(0, 30)}...`;
+            console.log(`      ✓ ${i + index + 1}/${texts.length}: "${displayText}" → "${displayResult}"`);
             return result;
           } catch (error) {
             console.error(`      ✗ ${i + index + 1}/${texts.length}: Failed to translate "${text.substring(0, 30)}..."`);
