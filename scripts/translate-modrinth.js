@@ -69,16 +69,19 @@ class ModrinthTranslator {
     };
 
     const langName = languageNames[targetLang] || targetLang;
-    const prompt = `Please translate the following UI text to ${langName}. This is from the Modrinth application interface. 
+    const prompt = `Translate this UI text to ${langName}. Keep it exact and complete.
 
-Requirements:
-- Keep the original formatting exactly
-- Preserve any HTML tags and placeholders like {variables}
-- Do NOT add ellipsis (...) unless present in the original
-- Only return the translated text without quotes, explanations, or additional punctuation
+CRITICAL: 
+- Translate the FULL text completely
+- Do NOT add "..." or ellipsis anywhere
+- Do NOT truncate or shorten the translation
+- Preserve {variables} and HTML tags exactly
+- Return ONLY the complete translation
 
-Text to translate:
-${text}`;
+Original text:
+${text}
+
+Complete ${langName} translation:`;
 
     try {
       const response = await fetch(this.apiUrl, {
@@ -90,8 +93,8 @@ ${text}`;
         body: JSON.stringify({
           model: this.model,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.3,
-          max_tokens: 500
+          temperature: 0.1, // 更低的temperature，更严格遵循指令
+          max_tokens: 800   // 增加token限制，避免截断
         })
       });
 
@@ -117,10 +120,23 @@ ${text}`;
       // 清理翻译结果
       translatedText = translatedText.replace(/^["']|["']$/g, '');
       
-      // 清理不必要的省略号（如果原文没有省略号）
-      if (!text.includes('...') && translatedText.includes('...')) {
-        translatedText = translatedText.replace(/\.\.\.+$/, '');
+      // 更强力的省略号清理
+      if (!text.includes('...')) {
+        // 移除末尾的省略号
+        translatedText = translatedText.replace(/\.\.\.+$/g, '');
+        // 移除中间和开头的省略号（如果原文没有）
+        translatedText = translatedText.replace(/\.\.\.+/g, '');
       }
+      
+      // 清理多余的标点符号
+      translatedText = translatedText.replace(/\s+$/, ''); // 末尾空格
+      translatedText = translatedText.replace(/\.+$/, match => {
+        // 如果原文末尾没有句号，不要添加多个句号
+        if (!text.endsWith('.') && match.length > 1) {
+          return '';
+        }
+        return match;
+      });
       
       return translatedText;
     } catch (error) {
