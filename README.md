@@ -50,8 +50,13 @@ TRANSLATION_API_URL = https://api.openai.com/v1/chat/completions
 ```bash
 # 在Actions页面点击 "Auto Translate Modrinth" workflow
 # 然后点击 "Run workflow"
-# 选择要构建的标签（如 v0.8.2）
+# 选择要构建的版本：
+#   - latest: 最新标签版本（如 v0.9.5）（推荐）
+#   - main: 最新开发版本
+#   - 特定版本: 如 v0.9.5, v0.9.4
 ```
+
+> **💡 版本说明**: Modrinth现在使用git tags发布版本，不再创建GitHub releases。`latest`会自动获取最新的tag版本。
 
 #### 方法2: 定时触发
 ```bash

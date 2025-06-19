@@ -241,8 +241,34 @@ class ModrinthTranslationExtractor {
     
     const allTranslations = {};
     
+    // 检测项目结构（新版 vs 旧版）
+    const isNewStructure = fs.existsSync(path.join(this.sourcePath, 'apps'));
+    const isOldStructure = fs.existsSync(path.join(this.sourcePath, 'theseus_gui'));
+    
+    console.log(`🔍 Project structure detection:`);
+    console.log(`  New structure (apps/): ${isNewStructure ? '✅' : '❌'}`);
+    console.log(`  Old structure (theseus_gui/): ${isOldStructure ? '✅' : '❌'}`);
+    
+    if (!isNewStructure && !isOldStructure) {
+      console.log(`❌ Unknown project structure, cannot extract translations`);
+      return {};
+    }
+    
+    let jsonPattern, vuePattern;
+    
+    if (isNewStructure) {
+      // 新版本结构
+      console.log(`🎯 Using new project structure (apps/)`);
+      jsonPattern = path.join(this.sourcePath, '**/locales/en-US/*.json');
+      vuePattern = path.join(this.sourcePath, 'apps/app-frontend/src/components/**/*.vue');
+    } else {
+      // 旧版本结构
+      console.log(`🎯 Using old project structure (theseus_gui/)`);
+      jsonPattern = path.join(this.sourcePath, '**/locales/en/*.json');
+      vuePattern = path.join(this.sourcePath, 'theseus_gui/src/components/**/*.vue');
+    }
+    
     // 扫描现有的JSON翻译文件
-    const jsonPattern = path.join(this.sourcePath, '**/locales/en-US/*.json');
     console.log(`🔍 Searching for JSON files with pattern: ${jsonPattern}`);
     const jsonFiles = glob.sync(jsonPattern);
     
@@ -257,8 +283,7 @@ class ModrinthTranslationExtractor {
       }
     });
     
-    // 扫描Vue组件文件（重点关注app-frontend）
-    const vuePattern = path.join(this.sourcePath, 'apps/app-frontend/src/components/**/*.vue');
+    // 扫描Vue组件文件
     console.log(`🔍 Searching for Vue files with pattern: ${vuePattern}`);
     const vueFiles = glob.sync(vuePattern);
     
@@ -282,7 +307,9 @@ class ModrinthTranslationExtractor {
     
     // 如果有Vue翻译，添加到结果中
     if (Object.keys(vueTranslations).length > 0) {
-      const vueTranslationFile = 'apps/app-frontend/src/locales/en-US/components.json';
+      const vueTranslationFile = isNewStructure 
+        ? 'apps/app-frontend/src/locales/en-US/components.json'
+        : 'theseus_gui/src/locales/en/components.json';
       allTranslations[vueTranslationFile] = vueTranslations;
     }
     

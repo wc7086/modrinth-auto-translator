@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       modrinth_tag:
-        description: 'Modrinth版本标签 (如: v0.8.2, 或 latest)'
+        description: 'Modrinth版本标签 (如: v0.9.5, main, 或 latest)'
         required: true
         default: 'latest'
         type: string
@@ -25,6 +25,7 @@ on:
 
 env:
   MODRINTH_REPO: "modrinth/code"
+  DEFAULT_TAG: "latest"
   NODE_VERSION: '18'
   RUST_VERSION: 'stable'
 
@@ -47,19 +48,30 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Get Modrinth latest release
+      - name: Get Modrinth latest tag
         id: get-latest
         if: github.event.inputs.modrinth_tag == 'latest' || github.event.inputs.modrinth_tag == ''
         run: |
-          LATEST_TAG=$(curl -s https://api.github.com/repos/${{ env.MODRINTH_REPO }}/releases/latest | jq -r .tag_name)
-          echo "latest-tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-          echo "📋 Latest Modrinth release: $LATEST_TAG"
+          echo "🔍 Getting Modrinth latest tag..."
+          
+          # Modrinth不再使用GitHub releases，改用git tags
+          LATEST_TAG=$(curl -s https://api.github.com/repos/${{ env.MODRINTH_REPO }}/tags | jq -r '.[0].name')
+          
+          if [ "$LATEST_TAG" != "null" ] && [ -n "$LATEST_TAG" ]; then
+            echo "latest-tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+            echo "📋 Latest Modrinth tag: $LATEST_TAG"
+          else
+            echo "latest-tag=main" >> $GITHUB_OUTPUT
+            echo "⚠️ No tags found, using main branch"
+          fi
 
       - name: Determine Modrinth version
         id: determine-version
         run: |
-          if [ "${{ github.event.inputs.modrinth_tag }}" = "latest" ] || [ "${{ github.event.inputs.modrinth_tag }}" = "" ]; then
+          if [ "${{ github.event.inputs.modrinth_tag }}" = "latest" ]; then
             VERSION="${{ steps.get-latest.outputs.latest-tag }}"
+          elif [ -z "${{ github.event.inputs.modrinth_tag }}" ]; then
+            VERSION="main"
           else
             VERSION="${{ github.event.inputs.modrinth_tag }}"
           fi
