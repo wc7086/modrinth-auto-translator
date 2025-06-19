@@ -1,0 +1,459 @@
+name: 'Auto Translate Modrinth App'
+
+on:
+  workflow_dispatch:
+    inputs:
+      modrinth_tag:
+        description: 'Modrinth版本标签 (如: v0.8.2, 或 latest)'
+        required: true
+        default: 'latest'
+        type: string
+      target_languages:
+        description: '目标语言 (逗号分隔)'
+        required: false
+        default: 'zh-CN,ja-JP,ko-KR,fr-FR,de-DE,es-ES'
+        type: string
+      skip_translation:
+        description: '跳过翻译步骤'
+        required: false
+        default: false
+        type: boolean
+  
+  schedule:
+    # 每周日UTC 02:00运行，检查是否有新版本
+    - cron: '0 2 * * 0'
+
+env:
+  MODRINTH_REPO: "modrinth/code"
+  NODE_VERSION: '18'
+  RUST_VERSION: 'stable'
+
+jobs:
+  setup-and-translate:
+    runs-on: ubuntu-latest
+    outputs:
+      has-translations: ${{ steps.check-translations.outputs.has-translations }}
+      modrinth-version: ${{ steps.setup-modrinth.outputs.version }}
+      release-name: ${{ steps.setup-modrinth.outputs.release-name }}
+    
+    steps:
+      - name: Checkout translator repository
+        uses: actions/checkout@v4
+        with:
+          path: translator
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Get Modrinth latest release
+        id: get-latest
+        if: github.event.inputs.modrinth_tag == 'latest' || github.event.inputs.modrinth_tag == ''
+        run: |
+          LATEST_TAG=$(curl -s https://api.github.com/repos/${{ env.MODRINTH_REPO }}/releases/latest | jq -r .tag_name)
+          echo "latest-tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "📋 Latest Modrinth release: $LATEST_TAG"
+
+      - name: Determine Modrinth version
+        id: determine-version
+        run: |
+          if [ "${{ github.event.inputs.modrinth_tag }}" = "latest" ] || [ "${{ github.event.inputs.modrinth_tag }}" = "" ]; then
+            VERSION="${{ steps.get-latest.outputs.latest-tag }}"
+          else
+            VERSION="${{ github.event.inputs.modrinth_tag }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "🎯 Using Modrinth version: $VERSION"
+
+      - name: Clone Modrinth source code
+        id: setup-modrinth
+        run: |
+          VERSION="${{ steps.determine-version.outputs.version }}"
+          echo "📥 Cloning Modrinth $VERSION..."
+          
+          git clone --depth 1 --branch $VERSION https://github.com/${{ env.MODRINTH_REPO }}.git modrinth-source
+          
+          cd modrinth-source
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "commit-sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "release-name=Modrinth-Multilang-$VERSION" >> $GITHUB_OUTPUT
+          
+          echo "✅ Cloned Modrinth $VERSION (commit: ${COMMIT_SHA:0:8})"
+          
+          # 显示项目结构
+          echo "📁 Project structure:"
+          ls -la
+          echo "📱 App structure:"
+          ls -la apps/app/ || echo "⚠️ App directory not found"
+
+      - name: Install translation dependencies
+        run: |
+          cd translator
+          npm install
+          # 安装额外依赖
+          npm install glob @types/node
+
+      - name: Extract translation strings
+        id: extract
+        run: |
+          cd translator
+          echo "🔍 Extracting translations from Modrinth source..."
+          
+          # 设置源码路径
+          export MODRINTH_SOURCE_PATH="../modrinth-source"
+          
+          # 运行提取脚本
+          node scripts/extract-modrinth-translations.js ../modrinth-source modrinth-translations.json
+          
+          # 检查提取结果
+          if [ -f "modrinth-translations.json" ]; then
+            TOTAL_KEYS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('modrinth-translations.json', 'utf8')).totalKeys || 0)")
+            echo "total-keys=$TOTAL_KEYS" >> $GITHUB_OUTPUT
+            echo "📊 Extracted $TOTAL_KEYS translation keys"
+          else
+            echo "total-keys=0" >> $GITHUB_OUTPUT
+            echo "❌ No translations extracted"
+          fi
+
+      - name: Check translations
+        id: check-translations
+        run: |
+          cd translator
+          TOTAL_KEYS="${{ steps.extract.outputs.total-keys }}"
+          if [ "$TOTAL_KEYS" -gt 0 ]; then
+            echo "has-translations=true" >> $GITHUB_OUTPUT
+            echo "✅ Found $TOTAL_KEYS translation keys"
+          else
+            echo "has-translations=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No translations to process"
+          fi
+
+      - name: Setup target languages
+        id: setup-languages
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.target_languages }}" ]; then
+            LANGUAGES="${{ github.event.inputs.target_languages }}"
+          else
+            LANGUAGES="zh-CN,ja-JP,ko-KR,fr-FR,de-DE,es-ES"
+          fi
+          echo "languages=$LANGUAGES" >> $GITHUB_OUTPUT
+          echo "🌍 Target languages: $LANGUAGES"
+
+      - name: Translate content
+        if: steps.check-translations.outputs.has-translations == 'true' && !inputs.skip_translation
+        env:
+          TRANSLATION_API_KEY: ${{ secrets.TRANSLATION_API_KEY }}
+          TRANSLATION_API_URL: ${{ secrets.TRANSLATION_API_URL }}
+          TRANSLATION_MODEL: ${{ secrets.TRANSLATION_MODEL }}
+        run: |
+          cd translator
+          echo "🌍 Starting translation process..."
+          
+          # 设置目标语言
+          export TARGET_LANGUAGES="${{ steps.setup-languages.outputs.languages }}"
+          
+          # 运行翻译
+          node scripts/translate-modrinth.js modrinth-translations.json ../modrinth-source
+          
+          # 检查翻译结果
+          if [ -d "../modrinth-source/apps/app-frontend/src/locales" ]; then
+            echo "✅ Translation completed"
+            echo "📁 Generated language directories:"
+            ls -la ../modrinth-source/apps/app-frontend/src/locales/
+          else
+            echo "❌ Translation failed"
+            exit 1
+          fi
+
+      - name: Upload translation artifacts
+        if: steps.check-translations.outputs.has-translations == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: modrinth-translated-source
+          path: |
+            modrinth-source/
+            translator/modrinth-translations.json
+          retention-days: 7
+
+  build-apps:
+    needs: setup-and-translate
+    if: always() && needs.setup-and-translate.outputs.has-translations == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-22.04, windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Download translated source
+        uses: actions/download-artifact@v4
+        with:
+          name: modrinth-translated-source
+          path: .
+
+      - name: Setup Rust
+        if: startsWith(matrix.platform, 'macos')
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          rustflags: ''
+          target: x86_64-apple-darwin
+
+      - name: Setup Rust
+        if: "!startsWith(matrix.platform, 'macos')"
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          rustflags: ''
+
+      - name: Setup Rust cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            modrinth-source/target
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-modrinth-app-${{ hashFiles('modrinth-source/apps/app/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-modrinth-app-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare --activate
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-modrinth-${{ hashFiles('modrinth-source/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-modrinth-
+
+      - name: Install system dependencies (Ubuntu)
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev pkg-config libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install Node.js dependencies
+        run: |
+          cd modrinth-source
+          echo "📦 Installing dependencies..."
+          pnpm install
+          
+          # 显示可用的翻译
+          if [ -d "apps/app-frontend/src/locales" ]; then
+            echo "🌍 Available translations:"
+            ls -la apps/app-frontend/src/locales/
+          fi
+
+      - name: Build Modrinth App (macOS)
+        if: startsWith(matrix.platform, 'macos')
+        run: |
+          cd modrinth-source/apps/app
+          echo "🍎 Building Modrinth App for macOS..."
+          pnpm run tauri build --target universal-apple-darwin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ENABLE_CODE_SIGNING: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Build Modrinth App (Windows/Linux)
+        if: "!startsWith(matrix.platform, 'macos')"
+        run: |
+          cd modrinth-source/apps/app
+          echo "🏗️ Building Modrinth App for ${{ matrix.platform }}..."
+          pnpm run tauri build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: modrinth-app-${{ matrix.platform }}
+          path: |
+            modrinth-source/apps/app/target/*/release/bundle/*/*.dmg
+            modrinth-source/apps/app/target/*/release/bundle/*/*.app.tar.gz
+            modrinth-source/apps/app/target/*/release/bundle/*/*.app.tar.gz.sig
+            modrinth-source/apps/app/target/release/bundle/*/*.dmg
+            modrinth-source/apps/app/target/release/bundle/*/*.app.tar.gz
+            modrinth-source/apps/app/target/release/bundle/*/*.app.tar.gz.sig
+            modrinth-source/apps/app/target/release/bundle/*/*.AppImage
+            modrinth-source/apps/app/target/release/bundle/*/*.AppImage.tar.gz
+            modrinth-source/apps/app/target/release/bundle/*/*.AppImage.tar.gz.sig
+            modrinth-source/apps/app/target/release/bundle/*/*.deb
+            modrinth-source/apps/app/target/release/bundle/*/*.rpm
+            modrinth-source/apps/app/target/release/bundle/msi/*.msi
+            modrinth-source/apps/app/target/release/bundle/msi/*.msi.zip
+            modrinth-source/apps/app/target/release/bundle/msi/*.msi.zip.sig
+            modrinth-source/apps/app/target/release/bundle/nsis/*.exe
+            modrinth-source/apps/app/target/release/bundle/nsis/*.nsis.zip
+            modrinth-source/apps/app/target/release/bundle/nsis/*.nsis.zip.sig
+          if-no-files-found: error
+
+  create-release:
+    needs: [setup-and-translate, build-apps]
+    if: always() && !cancelled() && needs.setup-and-translate.outputs.has-translations == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout translator repository
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          
+          # 收集所有构建产物
+          echo "📦 Collecting build artifacts..."
+          find artifacts -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.msi" -o -name "*.exe" | while read file; do
+            filename=$(basename "$file")
+            # 重命名以包含语言信息
+            new_name="Modrinth-Multilang-${filename}"
+            cp "$file" "release-assets/$new_name"
+            echo "  📄 $new_name"
+          done
+          
+          # 收集签名文件
+          find artifacts -name "*.sig" | while read file; do
+            filename=$(basename "$file")
+            new_name="Modrinth-Multilang-${filename}"
+            cp "$file" "release-assets/$new_name"
+          done
+          
+          echo "📊 Release assets prepared:"
+          ls -la release-assets/
+
+      - name: Get release information
+        id: release-info
+        run: |
+          MODRINTH_VERSION="${{ needs.setup-and-translate.outputs.modrinth-version }}"
+          RELEASE_NAME="${{ needs.setup-and-translate.outputs.release-name }}"
+          RELEASE_TAG="multilang-$MODRINTH_VERSION-$(date +%Y%m%d)"
+          
+          echo "modrinth-version=$MODRINTH_VERSION" >> $GITHUB_OUTPUT
+          echo "release-name=$RELEASE_NAME" >> $GITHUB_OUTPUT
+          echo "release-tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          
+          echo "🏷️ Release tag: $RELEASE_TAG"
+          echo "📦 Release name: $RELEASE_NAME"
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          MODRINTH_VERSION="${{ steps.release-info.outputs.modrinth-version }}"
+          
+          cat > release-notes.md << EOF
+          # 🌍 Modrinth App 多语言版本 - $MODRINTH_VERSION
+          
+          基于 Modrinth 官方版本 [\`$MODRINTH_VERSION\`](https://github.com/modrinth/code/releases/tag/$MODRINTH_VERSION) 构建的多语言版本。
+          
+          ## ✨ 新增功能
+          
+          - 🌍 **多语言界面支持**
+            - 简体中文 (zh-CN)
+            - 日语 (ja-JP) 
+            - 韩语 (ko-KR)
+            - 法语 (fr-FR)
+            - 德语 (de-DE)
+            - 西班牙语 (es-ES)
+          
+          - 🔄 **自动翻译系统**
+            - AI驱动的高质量翻译
+            - 智能保持格式和占位符
+            - 增量更新支持
+          
+          - 🎯 **完整功能保持**
+            - 所有原版Modrinth功能
+            - 完全兼容官方版本
+            - 自动语言检测
+          
+          ## 📦 下载指南
+          
+          ### Windows
+          - **安装包**: \`Modrinth-Multilang-*.exe\` 
+          - **便携版**: \`Modrinth-Multilang-*.msi\`
+          
+          ### macOS
+          - **通用版本**: \`Modrinth-Multilang-*.dmg\` (支持Intel + Apple Silicon)
+          
+          ### Linux
+          - **AppImage**: \`Modrinth-Multilang-*.AppImage\` (通用)
+          - **Debian/Ubuntu**: \`Modrinth-Multilang-*.deb\`
+          - **Red Hat/CentOS**: \`Modrinth-Multilang-*.rpm\`
+          
+          ## 🔐 安全验证
+          
+          所有文件都包含对应的 \`.sig\` 签名文件，可用于验证文件完整性。
+          
+          ## 🚀 使用说明
+          
+          1. 下载对应平台的安装包
+          2. 安装并启动应用
+          3. 应用会根据系统语言自动选择界面语言
+          4. 也可在设置中手动切换语言
+          
+          ## 📊 技术信息
+          
+          - **原版版本**: $MODRINTH_VERSION
+          - **构建时间**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - **翻译引擎**: OpenAI GPT-3.5-turbo
+          - **构建系统**: GitHub Actions
+          
+          ## 🐛 问题反馈
+          
+          如果遇到翻译问题或其他Bug，请在本仓库提交Issue。
+          
+          对于Modrinth本身的功能问题，请访问[官方仓库](https://github.com/modrinth/code)。
+          
+          ---
+          
+          🎉 **感谢使用Modrinth多语言版本！**
+          EOF
+          
+          echo "Release notes generated"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.release-info.outputs.release-tag }}
+          name: ${{ steps.release-info.outputs.release-name }}
+          body_path: release-notes.md
+          files: release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Output release information
+        run: |
+          echo "✅ Release created successfully!"
+          echo "🏷️ Tag: ${{ steps.release-info.outputs.release-tag }}"
+          echo "📦 Name: ${{ steps.release-info.outputs.release-name }}"
+          echo "🌍 Languages: ${{ needs.setup-and-translate.outputs.languages }}"
+          echo "🔗 URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.release-info.outputs.release-tag }}"

@@ -1,0 +1,89 @@
+{
+  "languages": {
+    "zh-CN": {
+      "name": "简体中文",
+      "nativeName": "简体中文",
+      "englishName": "Simplified Chinese",
+      "code": "zh-CN",
+      "iso": "zh",
+      "direction": "ltr",
+      "region": "China",
+      "flag": "🇨🇳"
+    },
+    "ja-JP": {
+      "name": "日本語", 
+      "nativeName": "日本語",
+      "englishName": "Japanese",
+      "code": "ja-JP",
+      "iso": "ja",
+      "direction": "ltr",
+      "region": "Japan",
+      "flag": "🇯🇵"
+    },
+    "ko-KR": {
+      "name": "한국어",
+      "nativeName": "한국어", 
+      "englishName": "Korean",
+      "code": "ko-KR",
+      "iso": "ko",
+      "direction": "ltr",
+      "region": "South Korea",
+      "flag": "🇰🇷"
+    },
+    "fr-FR": {
+      "name": "Français",
+      "nativeName": "Français",
+      "englishName": "French", 
+      "code": "fr-FR",
+      "iso": "fr",
+      "direction": "ltr",
+      "region": "France",
+      "flag": "🇫🇷"
+    },
+    "de-DE": {
+      "name": "Deutsch",
+      "nativeName": "Deutsch",
+      "englishName": "German",
+      "code": "de-DE", 
+      "iso": "de",
+      "direction": "ltr",
+      "region": "Germany",
+      "flag": "🇩🇪"
+    },
+    "es-ES": {
+      "name": "Español",
+      "nativeName": "Español",
+      "englishName": "Spanish",
+      "code": "es-ES",
+      "iso": "es", 
+      "direction": "ltr",
+      "region": "Spain",
+      "flag": "🇪🇸"
+    },
+    "en-US": {
+      "name": "English",
+      "nativeName": "English", 
+      "englishName": "English",
+      "code": "en-US",
+      "iso": "en",
+      "direction": "ltr",
+      "region": "United States",
+      "flag": "🇺🇸"
+    }
+  },
+  "fallbacks": {
+    "zh": "zh-CN",
+    "ja": "ja-JP", 
+    "ko": "ko-KR",
+    "fr": "fr-FR",
+    "de": "de-DE",
+    "es": "es-ES",
+    "en": "en-US"
+  },
+  "regions": {
+    "Asia": ["zh-CN", "ja-JP", "ko-KR"],
+    "Europe": ["fr-FR", "de-DE", "es-ES"],
+    "Americas": ["en-US"],
+    "Popular": ["zh-CN", "ja-JP", "ko-KR", "fr-FR", "de-DE", "es-ES"]
+  }
+}

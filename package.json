@@ -1,0 +1,36 @@
+{
+  "name": "modrinth-auto-translator",
+  "version": "1.0.0",
+  "description": "Automated translation and build system for Modrinth App",
+  "main": "scripts/extract-modrinth-translations.js",
+  "scripts": {
+    "extract": "node scripts/extract-modrinth-translations.js",
+    "translate": "node scripts/translate-modrinth.js",
+    "translate-and-build": "npm run extract && npm run translate",
+    "test-extraction": "node scripts/extract-modrinth-translations.js ./test-modrinth test-translations.json",
+    "test-translation": "node scripts/translate-modrinth.js test-translations.json ./test-modrinth"
+  },
+  "dependencies": {
+    "glob": "^10.3.0"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "modrinth",
+    "translation",
+    "i18n",
+    "automation",
+    "tauri",
+    "vue",
+    "multilingual"
+  ],
+  "author": "Modrinth Auto Translator",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/modrinth-auto-translator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/modrinth-auto-translator/issues"
+  },
+  "homepage": "https://github.com/your-username/modrinth-auto-translator#readme"
+}

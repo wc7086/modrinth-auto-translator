@@ -1,0 +1,68 @@
+{
+  "targetLanguages": [
+    "zh-CN",
+    "ja-JP", 
+    "ko-KR",
+    "fr-FR",
+    "de-DE",
+    "es-ES"
+  ],
+  "batchSize": 10,
+  "delay": 1200,
+  "model": "gpt-3.5-turbo",
+  "skipPatterns": [
+    "css-class",
+    "variable-name",
+    "technical-term",
+    "brand-name",
+    "file-path",
+    "url",
+    "email",
+    "version-number"
+  ],
+  "includePatterns": [
+    "ui-text",
+    "error-message",
+    "success-message",
+    "warning-message",
+    "info-message",
+    "button-text",
+    "label-text",
+    "placeholder-text",
+    "tooltip-text",
+    "modal-text",
+    "dialog-text"
+  ],
+  "qualityThresholds": {
+    "minLength": 2,
+    "maxLength": 100,
+    "minWordCount": 1,
+    "maxWordCount": 20
+  },
+  "languageSettings": {
+    "zh-CN": {
+      "name": "Simplified Chinese",
+      "prompt": "Please translate to Simplified Chinese (简体中文). Use modern, clear expressions suitable for software interfaces."
+    },
+    "ja-JP": {
+      "name": "Japanese", 
+      "prompt": "Please translate to Japanese (日本語). Use polite form (丁寧語) suitable for software interfaces."
+    },
+    "ko-KR": {
+      "name": "Korean",
+      "prompt": "Please translate to Korean (한국어). Use formal language suitable for software interfaces."
+    },
+    "fr-FR": {
+      "name": "French",
+      "prompt": "Please translate to French (Français). Use clear, modern French suitable for software interfaces."
+    },
+    "de-DE": {
+      "name": "German",
+      "prompt": "Please translate to German (Deutsch). Use clear, modern German suitable for software interfaces."
+    },
+    "es-ES": {
+      "name": "Spanish",
+      "prompt": "Please translate to Spanish (Español). Use clear, modern Spanish suitable for software interfaces."
+    }
+  }
+}
